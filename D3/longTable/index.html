@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Bar Chart with Venue Filters, Tooltips & Table Highlighting</title>
+  <!-- Load D3 v7 from a CDN -->
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    /* Basic styling for chart, table, and buttons */
+    svg {
+      font: 10px sans-serif;
+    }
+    .bar {
+      fill: steelblue;
+    }
+    .axis path,
+    .axis line {
+      stroke: #ccc;
+    }
+    #buttons {
+      margin-bottom: 20px;
+    }
+    #buttons button {
+      margin-right: 5px;
+      padding: 5px 10px;
+      cursor: pointer;
+    }
+    table {
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 6px 12px;
+      text-align: center;
+    }
+    th {
+      background: #f4f4f4;
+    }
+    /* Tooltip styling */
+    #tooltip {
+      position: absolute;
+      background-color: rgba(255, 255, 255, 0.9);
+      border: 1px solid #ccc;
+      padding: 5px 10px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s ease-in-out;
+      font-size: 12px;
+    }
+    /* Highlighted table cell */
+    .highlight {
+      background-color: yellow;
+    }
+  </style>
+</head>
+<body>
+  <h1>Value by 30‑Minute Intervals (CSV Data)</h1>
+  
+  <!-- Buttons to filter the bar chart -->
+  <div id="buttons">
+    <button id="btn-total">Total</button>
+    <button id="btn-v1">V1</button>
+    <button id="btn-v2">V2</button>
+    <button id="btn-v3">V3</button>
+  </div>
+  
+  <!-- Container for the bar chart -->
+  <div id="chart"></div>
+  
+  <!-- Tooltip container -->
+  <div id="tooltip"></div>
+  
+  <h2>Data Table</h2>
+  <!-- Container for the data table -->
+  <div id="table"></div>
+  
+  <script>
+    // Define time parsing and formatting functions.
+    const parseTime  = d3.timeParse("%H:%M");
+    const formatTime = d3.timeFormat("%H:%M");
+    
+    // Load the CSV file and parse each row.
+    d3.csv("data.csv", function(d) {
+      return { time: parseTime(d.Time), venue: d.venue, value: +d.value };
+    }).then(function(data) {
+      
+      // Determine the overall time range from the CSV.
+      const minTime = d3.min(data, d => d.time);
+      const maxTime = d3.max(data, d => d.time);
+      
+      // Generate an array of 30‑minute intervals from minTime to (maxTime + 30min)
+      const completeTimes = d3.timeMinute.every(30).range(minTime, d3.timeMinute.offset(maxTime, 30));
+      
+      // ----- Create the Bar Chart -----
+      
+      // Set chart dimensions.
+      const margin = { top: 20, right: 30, bottom: 40, left: 50 },
+            width  = 600 - margin.left - margin.right,
+            height = 400 - margin.top - margin.bottom;
+      
+      // Create the SVG container.
+      const svg = d3.select("#chart")
+                    .append("svg")
+                    .attr("width", width + margin.left + margin.right)
+                    .attr("height", height + margin.top + margin.bottom)
+                    .append("g")
+                    .attr("transform", `translate(${margin.left},${margin.top})`);
+      
+      // Create the x scale with all complete time intervals.
+      const x = d3.scaleBand()
+                  .domain(completeTimes.map(t => formatTime(t)))
+                  .range([0, width])
+                  .padding(0.2);
+      
+      // Append the x axis.
+      svg.append("g")
+         .attr("class", "x axis")
+         .attr("transform", `translate(0,${height})`)
+         .call(d3.axisBottom(x));
+      
+      // Create the y scale.
+      const y = d3.scaleLinear()
+                  .range([height, 0]);
+      
+      // Append the y axis.
+      const yAxis = svg.append("g")
+                       .attr("class", "y axis");
+      
+      // Tooltip element (already added to HTML with id="tooltip")
+      const tooltip = d3.select("#tooltip");
+      
+      // Variable to hold the currently selected filter.
+      // This variable will be updated via the button clicks.
+      let currentFilter = "total";
+      
+      // Function to update (or redraw) the chart based on the selected filter.
+      // Parameter filter: "total", "v1", "v2", or "v3".
+      function updateChart(filter) {
+        currentFilter = filter;
+        // For each 30‑minute interval, filter data (by venue if needed) and sum values.
+        const aggregated = completeTimes.map(t => {
+          const key = formatTime(t);
+          let filtered;
+          if (filter === "total") {
+            filtered = data.filter(d => formatTime(d.time) === key);
+          } else {
+            filtered = data.filter(d => formatTime(d.time) === key && d.venue === filter);
+          }
+          return { time: key, total: d3.sum(filtered, d => d.value) };
+        });
+        
+        // Update the y scale domain based on the maximum value.
+        y.domain([0, d3.max(aggregated, d => d.total)]).nice();
+        
+        // Update the y axis.
+        yAxis.transition()
+             .duration(500)
+             .call(d3.axisLeft(y));
+        
+        // Data binding for bars.
+        const bars = svg.selectAll(".bar")
+                        .data(aggregated);
+        
+        // Update existing bars.
+        bars.transition()
+            .duration(500)
+            .attr("x", d => x(d.time))
+            .attr("width", x.bandwidth())
+            .attr("y", d => y(d.total))
+            .attr("height", d => height - y(d.total));
+        
+        // Enter new bars and merge with existing bars.
+        bars.enter()
+            .append("rect")
+            .attr("class", "bar")
+            .attr("x", d => x(d.time))
+            .attr("width", x.bandwidth())
+            .attr("y", y(0))
+            .attr("height", 0)
+          .merge(bars)
+          // Add event listeners for tooltip and table cell highlighting.
+          .on("mouseover", function(event, d) {
+            // Show tooltip.
+            tooltip.style("opacity", 1)
+                   .html(`<strong>Time:</strong> ${d.time}<br><strong>Value:</strong> ${d.total}`);
+            // Remove previous highlight from all table cells.
+            d3.selectAll("#table td").classed("highlight", false);
+            // Highlight the corresponding table cell.
+            d3.select(`#table td[data-time="${d.time}"][data-col="${filter}"]`)
+              .classed("highlight", true);
+          })
+          .on("mousemove", function(event) {
+            tooltip.style("left", (event.pageX + 10) + "px")
+                   .style("top", (event.pageY - 28) + "px");
+          })
+          .on("mouseout", function() {
+            tooltip.style("opacity", 0);
+            // Remove highlight when mouse leaves the bar.
+            d3.selectAll("#table td").classed("highlight", false);
+          })
+          .transition()
+            .duration(500)
+            .attr("x", d => x(d.time))
+            .attr("width", x.bandwidth())
+            .attr("y", d => y(d.total))
+            .attr("height", d => height - y(d.total));
+        
+        // Remove any bars that are no longer needed.
+        bars.exit().remove();
+      }
+      
+      // Initially display the chart with "total" data.
+      updateChart("total");
+      
+      // ----- Add Button Event Listeners -----
+      d3.select("#btn-total").on("click", () => updateChart("total"));
+      d3.select("#btn-v1").on("click", () => updateChart("v1"));
+      d3.select("#btn-v2").on("click", () => updateChart("v2"));
+      d3.select("#btn-v3").on("click", () => updateChart("v3"));
+      
+      // ----- Create the Data Table -----
+      
+      // Determine unique venues.
+      const venues = Array.from(new Set(data.map(d => d.venue))).sort();
+      
+      // Generate table rows for each 30‑minute interval.
+      const tableData = completeTimes.map(t => {
+        const key = formatTime(t);
+        const filtered = data.filter(d => formatTime(d.time) === key);
+        const row = { time: key };
+        venues.forEach(venue => {
+          const record = filtered.find(d => d.venue === venue);
+          row[venue] = record ? record.value : "-";
+        });
+        row.total = d3.sum(filtered, d => d.value);
+        return row;
+      });
+      
+      // Define table columns: Time, each venue, and Total.
+      const columns = ["time", ...venues, "total"];
+      
+      // Append a table element to the #table container.
+      const table = d3.select("#table").append("table");
+      const thead = table.append("thead");
+      const tbody = table.append("tbody");
+      
+      // Create the header row.
+      thead.append("tr")
+           .selectAll("th")
+           .data(columns)
+           .enter()
+           .append("th")
+           .text(d => d.toUpperCase());
+      
+      // Create rows for each time interval.
+      const rows = tbody.selectAll("tr")
+                        .data(tableData)
+                        .enter()
+                        .append("tr");
+      
+      // Create cells in each row.
+      // Each cell now carries data attributes for time and column (i.e. venue or total)
+      rows.selectAll("td")
+          .data(row => columns.map(column => ({
+            time: row.time,
+            column: column,
+            value: row[column]
+          })))
+          .enter()
+          .append("td")
+          .attr("data-time", d => d.time)
+          .attr("data-col", d => d.column)
+          .text(d => d.value);
+      
+    }).catch(function(error) {
+      console.error("Error loading the CSV file:", error);
+    });
+  </script>
+</body>
+</html>

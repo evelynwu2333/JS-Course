@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Daily Dashboard (6 Days) - Side by Side</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    /* Basic styling */
+    body {
+      font-family: sans-serif;
+      margin: 20px;
+    }
+    h1, h3 {
+      text-align: center;
+    }
+    .button-container {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    /* Arrange dashboards side by side: two columns */
+    #container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-gap: 20px;
+      align-items: start;
+    }
+    .dashboard-column {
+      border: 1px solid #ccc;
+      padding: 10px;
+    }
+    .chart, .table {
+      margin: 10px auto;
+      max-width: 600px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 10px;
+    }
+    th, td {
+      border: 1px solid #aaa;
+      padding: 6px 10px;
+      text-align: center;
+    }
+    th {
+      background: #eee;
+    }
+  </style>
+</head>
+<body>
+  <h1>Daily Dashboard (6 Days) - Side by Side</h1>
+  <!-- Buttons remain at the top -->
+  <div class="button-container" id="buttons"></div>
+  
+  <!-- Dashboard container with two columns -->
+  <div id="container">
+    <div class="dashboard-column" id="left-dashboard">
+      <div class="chart" id="chart1"></div>
+      <div class="table" id="table1"></div>
+    </div>
+    <div class="dashboard-column" id="right-dashboard">
+      <div class="chart" id="chart2"></div>
+      <div class="table" id="table2"></div>
+    </div>
+  </div>
+  
+  <!-- Load separated JS function files -->
+  <script src="createButtons.js"></script>
+  <script src="updateChart1.js"></script>
+  <script src="updateTable1.js"></script>
+  <script src="updateChart2.js"></script>
+  <script src="updateTable2.js"></script>
+  <!-- Main JS file -->
+  <script src="main.js"></script>
+</body>
+</html>
